@@ -476,6 +476,7 @@ static int conference_pull(struct mdt_auplay_st *play0,
 }""", "mix and cross-feed received PCM")
 
 
+    replace_once(c,
 """\tmtx_lock(&s_lock);
 \tlist_unlink(&st->le);
 \tmtx_unlock(&s_lock);
