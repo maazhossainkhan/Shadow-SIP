@@ -589,7 +589,7 @@ int medut_audio_external_push(const int16_t *pcm, size_t nsamp)
 }""",
 """int medut_audio_external_pull(int16_t *pcm, size_t nsamp)
 {
-\tif (!pcm || !nsamp)
+\tint err = 0;\n\n\tif (!pcm || !nsamp)
 \t\treturn EINVAL;
 
 \t/* Always hand the platform a complete buffer, silence between calls. */
