@@ -36,9 +36,15 @@ Get-ChildItem -Path $app -Recurse -File | Where-Object { $extensions -contains $
         $updated = $updated.Replace('Local\\com.medut.generic.phone', 'Local\\com.maaz.shadowsip')
         $updated = $updated.Replace('L"Medut"', 'L"Shadow-SIP"')
     }
+    if ($relative -eq "windows/CMakeLists.txt") {
+        $updated = $updated.Replace('set(BINARY_NAME "medut")', 'set(BINARY_NAME "shadow_sip")')
+    }
     if ($relative -eq "windows/installer.iss") {
         $updated = [regex]::Replace($updated, '(?<![A-Za-z0-9_])Medut(?![-A-Za-z0-9_])', 'Shadow-SIP')
         $updated = $updated.Replace('"Shadow-SIP.CallLink"', '"ShadowSIP.CallLink"')
+        $updated = $updated.Replace('"medut.exe"', '"shadow_sip.exe"')
+        $updated = $updated.Replace('6B9A2E4C-3F1D-4C55-9E2A-6D0B7C1F8A31', 'A7D8B381-DC3C-4F0C-95EC-DF31DAA6E651')
+        $updated = $updated.Replace('https://github.com/Ibrahimgamal99/medut-softphone', 'https://github.com/maazhossainkhan/Shadow-SIP')
     }
     $updated = $updated.Replace("Recordings/Medut", "Recordings/Shadow-SIP")
     $updated = $updated.Replace("Recordings\Medut", "Recordings\Shadow-SIP")
