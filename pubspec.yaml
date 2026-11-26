@@ -1,0 +1,29 @@
+name: shadow_sip
+description: A private, cross-platform SIP softphone for Windows and Android.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.44.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  medut:
+    git:
+      url: https://github.com/Ibrahimgamal99/Medut-SDK.git
+      path: bindings/flutter
+      ref: b6354b138a56483611723132922edfef8715219b
+  permission_handler: ^11.3.1
+  shared_preferences: ^2.5.0
+  flutter_secure_storage: ^9.2.4
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
