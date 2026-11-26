@@ -51,7 +51,7 @@ Get-ChildItem -Path $app -Recurse -File | Where-Object { $extensions -contains $
     if ($relative -eq "test/core_test.dart") {
         $updated = $updated.Replace('RegExp(r''```json\n', 'RegExp(r''```json\r?\n')
         $updated = $updated.Replace('RegExp(r''```text\n', 'RegExp(r''```text\r?\n')
-        $updated = $updated.Replace("final doc = File('docs/account-setup.md').readAsStringSync();", "final doc = File('docs/account-setup.md').readAsStringSync().replaceAll('\\r\\n', '\\n');")
+        $updated = $updated.Replace("final doc = File('docs/account-setup.md').readAsStringSync();", "final doc = File('docs/account-setup.md').readAsStringSync().replaceAll('\r\n', '\n');")
     }
     if ($relative -eq "lib/main.dart") {
         $updated = $updated.Replace("MEDUT_VERSION", "SHADOW_SIP_VERSION")
