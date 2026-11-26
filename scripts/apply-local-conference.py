@@ -416,7 +416,7 @@ static bool conference_format_valid_locked(void)
 \t\t\t    peer_play->prm.srate != st->prm.srate ||
 \t\t\t    peer_play->prm.ch != st->prm.ch)
 \t\t\t\treturn EINVAL;
-\t\t\tauframe_init(&peer_af, AUFMT_S16LE, peer_play->frame,
+\t\t\tauframe_init(&peer_af, AUFMT_S16LE, st->peer_frame,
 \t\t\t             st->sampc, st->prm.srate, st->prm.ch);
 \t\t\tpeer_af.timestamp = tmr_jiffies_usec();
 \t\t\taubuf_read_auframe(peer_play->crossbuf, &peer_af);
@@ -425,7 +425,7 @@ static bool conference_format_valid_locked(void)
 \t\t\t * other remote caller. Averaging is overflow-safe. */
 \t\t\tfor (size_t i = 0; i < st->sampc; ++i) {
 \t\t\t\tint32_t mixed = (int32_t)st->frame[i] +
-\t\t\t\t                (int32_t)peer_play->frame[i];
+\t\t\t\t                (int32_t)st->peer_frame[i];
 \t\t\t\tst->frame[i] = (int16_t)(mixed / 2);
 \t\t\t}
 \t\t}
@@ -547,6 +547,7 @@ static int conference_pull(struct mdt_auplay_st *play0,
 \ts_conference = false;
 \tmtx_unlock(&s_lock);
 
+\tmem_deref(st->crossbuf);
 \tmem_deref(st->frame);
 }""", "playback teardown")
 
@@ -556,17 +557,29 @@ static int conference_pull(struct mdt_auplay_st *play0,
 \tst->prm = *prm;
 
 \tmtx_lock(&s_lock);""",
-"""\tst->wh    = wh;
-\tst->arg   = arg;
-\tst->prm   = *prm;
-\tst->sampc = nsamp_for(prm->srate, prm->ch, prm->ptime);
-\tst->frame = mem_zalloc(st->sampc * sizeof(int16_t), NULL);
-\tif (!st->frame) {
-\t\tmem_deref(st);
-\t\treturn ENOMEM;
-\t}
+"""	st->wh    = wh;
+	st->arg   = arg;
+	st->prm   = *prm;
+	st->sampc = nsamp_for(prm->srate, prm->ch, prm->ptime);
+	if (!st->sampc) {
+		mem_deref(st);
+		return EINVAL;
+	}
+	st->frame = mem_zalloc(st->sampc * sizeof(int16_t), NULL);
+	if (!st->frame) {
+		mem_deref(st);
+		return ENOMEM;
+	}
+	err = aubuf_alloc(&st->crossbuf,
+			  st->sampc * sizeof(int16_t),
+			  nsamp_for(prm->srate, prm->ch, 500) * sizeof(int16_t));
+	if (err) {
+		mem_deref(st);
+		return err;
+	}
+	aubuf_set_live(st->crossbuf, true);
 
-\tmtx_lock(&s_lock);""", "playback scratch frame")
+	mtx_lock(&s_lock);"", "playback scratch frame")
 
     replace_once(c,
 """int medut_audio_external_push(const int16_t *pcm, size_t nsamp)
