@@ -116,111 +116,103 @@ static bool           s_conference; /* guarded by s_lock */""", "conference flag
     replace_once(c,
 """static size_t nsamp_for(uint32_t srate, uint8_t ch, uint32_t ptime)
 {
-\treturn (size_t)srate * ch * (ptime ? ptime : 20) / 1000;
+	return (size_t)srate * ch * (ptime ? ptime : 20) / 1000;
 }""",
 """static size_t nsamp_for(uint32_t srate, uint8_t ch, uint32_t ptime)
 {
-\treturn (size_t)srate * ch * (ptime ? ptime : 20) / 1000;
+	return (size_t)srate * ch * (ptime ? ptime : 20) / 1000;
 }
 
 static uint32_t normal_ptime(uint32_t ptime)
 {
-\treturn ptime ? ptime : 20;
+	return ptime ? ptime : 20;
 }
 
 static bool same_audio_format(int fmt_a, uint32_t rate_a, uint8_t ch_a,
                                uint32_t ptime_a, int fmt_b, uint32_t rate_b,
                                uint8_t ch_b, uint32_t ptime_b)
 {
-\treturn fmt_a == fmt_b && rate_a == rate_b && ch_a == ch_b &&
-\t       normal_ptime(ptime_a) == normal_ptime(ptime_b);
+	return fmt_a == fmt_b && rate_a == rate_b && ch_a == ch_b &&
+	       normal_ptime(ptime_a) == normal_ptime(ptime_b);
 }
 
-/* Called with s_lock held. Only two full-duplex, identically negotiated
- * S16LE legs can enter the local mixer. */
+/* Find the playback opened for a given mdt_audio receive stream. */
+static struct mdt_auplay_st *play_for_owner(void *owner)
+{
+	struct le *le;
+	struct mdt_auplay_st *found = NULL;
+
+	for (le = list_head(&s_playl); le; le = le->next) {
+		struct mdt_auplay_st *play = list_ledata(le);
+		if (mdt_aurecv_owner(play->arg) == owner) {
+			if (found)
+				return NULL;
+			found = play;
+		}
+	}
+	return found;
+}
+
+/* Capture source A must consume the decoded playback stream belonging to B. */
+static struct mdt_auplay_st *peer_play_for_source(const struct mdt_ausrc_st *src)
+{
+	struct le *le;
+	struct mdt_auplay_st *found = NULL;
+
+	for (le = list_head(&s_srcl); le; le = le->next) {
+		struct mdt_ausrc_st *other = list_ledata(le);
+		if (other == src)
+			continue;
+		struct mdt_auplay_st *play = play_for_owner(other->arg);
+		if (!play)
+			return NULL;
+		if (found)
+			return NULL;
+		found = play;
+	}
+	return found;
+}
+
+/* Called with s_lock held. Enable only two full-duplex calls with matching PCM. */
 static bool conference_format_valid_locked(void)
 {
-\tstruct mdt_ausrc_st *src[2] = {NULL, NULL};
-\tstruct mdt_auplay_st *play[2] = {NULL, NULL};
-\tstruct le *le;
-\tunsigned ns = 0, np = 0;
+	struct mdt_ausrc_st *src[2] = {NULL, NULL};
+	struct mdt_auplay_st *play[2] = {NULL, NULL};
+	struct le *le;
+	unsigned ns = 0;
 
-\tfor (le = list_head(&s_srcl); le; le = le->next) {
-\t\tif (ns >= 2)
-\t\t\treturn false;
-\t\tsrc[ns++] = list_ledata(le);
-\t}
-\tfor (le = list_head(&s_playl); le; le = le->next) {
-\t\tif (np >= 2)
-\t\t\treturn false;
-\t\tplay[np++] = list_ledata(le);
-\t}
+	for (le = list_head(&s_srcl); le; le = le->next) {
+		if (ns >= 2)
+			return false;
+		src[ns++] = list_ledata(le);
+	}
+	if (ns != 2 || !src[0]->arg || !src[1]->arg ||
+	    src[0]->arg == src[1]->arg || !src[0]->peer_frame ||
+	    !src[1]->peer_frame)
+		return false;
 
-\tif (ns != 2 || np != 2)
-\t\treturn false;
+	play[0] = play_for_owner(src[0]->arg);
+	play[1] = play_for_owner(src[1]->arg);
+	if (!play[0] || !play[1] || play[0] == play[1] ||
+	    !play[0]->frame || !play[1]->frame ||
+	    !play[0]->crossbuf || !play[1]->crossbuf ||
+	    peer_play_for_source(src[0]) != play[1] ||
+	    peer_play_for_source(src[1]) != play[0])
+		return false;
 
-\treturn
-\t\tsame_audio_format(src[0]->prm.fmt, src[0]->prm.srate,
-\t\t                 src[0]->prm.ch, src[0]->prm.ptime,
-\t\t                 src[1]->prm.fmt, src[1]->prm.srate,
-\t\t                 src[1]->prm.ch, src[1]->prm.ptime) &&
-\t\tsame_audio_format(play[0]->prm.fmt, play[0]->prm.srate,
-\t\t                 play[0]->prm.ch, play[0]->prm.ptime,
-\t\t                 play[1]->prm.fmt, play[1]->prm.srate,
-\t\t                 play[1]->prm.ch, play[1]->prm.ptime) &&
-\t\tsame_audio_format(src[0]->prm.fmt, src[0]->prm.srate,
-\t\t                 src[0]->prm.ch, src[0]->prm.ptime,
-\t\t                 play[0]->prm.fmt, play[0]->prm.srate,
-\t\t                 play[0]->prm.ch, play[0]->prm.ptime);
-}
-
-/* Feed the same microphone PCM into a single call's encoder FIFO. */
-static int push_one_source(struct mdt_ausrc_st *st, const int16_t *pcm,
-                           size_t nsamp)
-{
-\tstruct auframe af;
-\tint err;
-
-\tif (!st->prm.ch || nsamp % st->prm.ch)
-\t\treturn EINVAL;
-
-\tauframe_init(&af, AUFMT_S16LE, (void *)pcm, nsamp,
-\t             st->prm.srate, st->prm.ch);
-\taf.timestamp = tmr_jiffies_usec();
-\terr = aubuf_write_auframe(st->ab, &af);
-\tif (err)
-\t\treturn err;
-
-\twhile (aubuf_cur_size(st->ab) >= st->sampc * 2) {
-\t\tsize_t before = aubuf_cur_size(st->ab);
-\t\tauframe_init(&af, AUFMT_S16LE, st->frame, st->sampc,
-\t\t             st->prm.srate, st->prm.ch);
-\t\taubuf_read_auframe(st->ab, &af);
-\t\tif (aubuf_cur_size(st->ab) >= before)
-\t\t\tbreak;
-\t\taf.timestamp = tmr_jiffies_usec();
-\t\tst->rh(&af, st->arg);
-\t}
-\treturn 0;
-}
-
-/* Reuse each player's scratch buffer and split large requests into ptime
- * chunks. The app's realtime pull path therefore allocates no memory. */
-static void play_one_to_buffer(struct mdt_auplay_st *st, int16_t *pcm,
-                               size_t nsamp)
-{
-\tstruct auframe af;
-\tsize_t offset = 0;
-\twhile (offset < nsamp) {
-\t\tsize_t chunk = nsamp - offset;
-\t\tif (chunk > st->sampc)
-\t\t\tchunk = st->sampc;
-\t\tauframe_init(&af, AUFMT_S16LE, pcm + offset, chunk,
-\t\t             st->prm.srate, st->prm.ch);
-\t\taf.timestamp = tmr_jiffies_usec();
-\t\tst->wh(&af, st->arg);
-\t\toffset += chunk;
-\t}
+	return
+		same_audio_format(src[0]->prm.fmt, src[0]->prm.srate,
+				  src[0]->prm.ch, src[0]->prm.ptime,
+				  src[1]->prm.fmt, src[1]->prm.srate,
+				  src[1]->prm.ch, src[1]->prm.ptime) &&
+		same_audio_format(play[0]->prm.fmt, play[0]->prm.srate,
+				  play[0]->prm.ch, play[0]->prm.ptime,
+				  play[1]->prm.fmt, play[1]->prm.srate,
+				  play[1]->prm.ch, play[1]->prm.ptime) &&
+		same_audio_format(src[0]->prm.fmt, src[0]->prm.srate,
+				  src[0]->prm.ch, src[0]->prm.ptime,
+				  play[0]->prm.fmt, play[0]->prm.srate,
+				  play[0]->prm.ch, play[0]->prm.ptime);
 }
 
 /* Mix the already-decoded peer frame into the local speaker buffer. */
@@ -231,7 +223,127 @@ static void mix_one_playback(struct mdt_auplay_st *st, int16_t *pcm,
 		int32_t mixed = (int32_t)pcm[i] + (int32_t)st->frame[i];
 		pcm[i] = (int16_t)(mixed / 2);
 	}
-}}""", "mix and cross-feed received PCM")
+}
+
+/* Feed microphone plus the other caller into this call's encoder FIFO. */
+static int push_one_source(struct mdt_ausrc_st *st,
+                           struct mdt_auplay_st *peer_play,
+                           const int16_t *pcm, size_t nsamp)
+{
+	struct auframe af, peer_af;
+	int err;
+
+	if (!st->prm.ch || nsamp % st->prm.ch)
+		return EINVAL;
+
+	auframe_init(&af, AUFMT_S16LE, (void *)pcm, nsamp,
+	             st->prm.srate, st->prm.ch);
+	af.timestamp = tmr_jiffies_usec();
+	err = aubuf_write_auframe(st->ab, &af);
+	if (err)
+		return err;
+
+	while (aubuf_cur_size(st->ab) >= st->sampc * sizeof(int16_t)) {
+		size_t before = aubuf_cur_size(st->ab);
+		auframe_init(&af, AUFMT_S16LE, st->frame, st->sampc,
+		             st->prm.srate, st->prm.ch);
+		aubuf_read_auframe(st->ab, &af);
+		if (aubuf_cur_size(st->ab) >= before)
+			break;
+
+		if (peer_play) {
+			if (!peer_play->crossbuf || !st->peer_frame ||
+			    peer_play->sampc != st->sampc ||
+			    peer_play->prm.srate != st->prm.srate ||
+			    peer_play->prm.ch != st->prm.ch)
+				return EINVAL;
+			auframe_init(&peer_af, AUFMT_S16LE, st->peer_frame,
+			             st->sampc, st->prm.srate, st->prm.ch);
+			peer_af.timestamp = tmr_jiffies_usec();
+			aubuf_read_auframe(peer_play->crossbuf, &peer_af);
+
+			/* Each remote caller hears local mic + the other remote caller. */
+			for (size_t i = 0; i < st->sampc; ++i) {
+				int32_t mixed = (int32_t)st->frame[i] +
+				                (int32_t)st->peer_frame[i];
+				st->frame[i] = (int16_t)(mixed / 2);
+			}
+		}
+
+		af.timestamp = tmr_jiffies_usec();
+		st->rh(&af, st->arg);
+	}
+	return 0;
+}
+
+/* Copy decoded RX frames to reusable buffers, feeding both opposite legs. */
+static void play_one_to_buffer(struct mdt_auplay_st *st, int16_t *pcm,
+                               size_t nsamp)
+{
+	struct auframe af;
+	size_t offset = 0;
+
+	while (offset < nsamp) {
+		size_t chunk = nsamp - offset;
+		if (chunk > st->sampc)
+			chunk = st->sampc;
+		auframe_init(&af, AUFMT_S16LE, pcm + offset, chunk,
+		             st->prm.srate, st->prm.ch);
+		af.timestamp = tmr_jiffies_usec();
+		st->wh(&af, st->arg);
+		offset += chunk;
+	}
+}
+
+/* Pull both callers once, queue each for the opposite encoder, and mix locally. */
+static int conference_pull(struct mdt_auplay_st *play0,
+                           struct mdt_auplay_st *play1,
+                           int16_t *pcm, size_t nsamp)
+{
+	struct auframe af0, af1;
+	size_t offset = 0;
+	int err;
+
+	if (play0->prm.srate != play1->prm.srate ||
+	    play0->prm.ch != play1->prm.ch ||
+	    play0->prm.ch == 0 || nsamp % play0->prm.ch)
+		return EINVAL;
+
+	while (offset < nsamp) {
+		size_t chunk = nsamp - offset;
+		if (chunk > play0->sampc) chunk = play0->sampc;
+		if (chunk > play1->sampc) chunk = play1->sampc;
+		if (!chunk)
+			return EINVAL;
+
+		play_one_to_buffer(play0, pcm + offset, chunk);
+		play_one_to_buffer(play1, play1->frame, chunk);
+
+		auframe_init(&af0, AUFMT_S16LE, pcm + offset, chunk,
+		             play0->prm.srate, play0->prm.ch);
+		af0.timestamp = tmr_jiffies_usec();
+		err = aubuf_write_auframe(play0->crossbuf, &af0);
+		if (err) {
+			aubuf_flush(play0->crossbuf);
+			err = aubuf_write_auframe(play0->crossbuf, &af0);
+			if (err) return err;
+		}
+
+		auframe_init(&af1, AUFMT_S16LE, play1->frame, chunk,
+		             play1->prm.srate, play1->prm.ch);
+		af1.timestamp = tmr_jiffies_usec();
+		err = aubuf_write_auframe(play1->crossbuf, &af1);
+		if (err) {
+			aubuf_flush(play1->crossbuf);
+			err = aubuf_write_auframe(play1->crossbuf, &af1);
+			if (err) return err;
+		}
+
+		mix_one_playback(play1, pcm + offset, chunk);
+		offset += chunk;
+	}
+	return 0;
+}""", "mix and cross-feed received PCM")
 
 
     replace_once(c,
