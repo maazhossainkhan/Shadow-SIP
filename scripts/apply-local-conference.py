@@ -411,7 +411,7 @@ static int conference_pull(struct mdt_auplay_st *play0,
 	}
 	aubuf_set_live(st->crossbuf, true);
 
-	mtx_lock(&s_lock);"", "playback scratch frame")
+	mtx_lock(&s_lock);""", "playback scratch frame")
 
     replace_once(c,
 """int medut_audio_external_push(const int16_t *pcm, size_t nsamp)
