@@ -698,7 +698,8 @@ JNIEXPORT jint JNI_FN(nativeSetConference)(JNIEnv *env, jclass cls,
     private external fun nativeSetConference(enable: Boolean): Int
 
     /** Enable/disable local mixing of two compatible SIP call legs. */
-    fun setConference(enabled: Boolean): Int = nativeSetConference(enabled)
+    fun setConference(enabled: Boolean): Int =
+        if (available) nativeSetConference(enabled) else ENODEV
 
     /**
      * Tell the SDK whether capture runs through the platform's voice path""", "Kotlin JNI bridge")
@@ -738,7 +739,7 @@ def patch_android_app() -> None:
             sdkUp = true
             appOwnedAudioReady = runCatching {
                 MedutAndroid.useAppOwnedAudio(true)
-                true
+                MedutAndroid.appOwnedAudioStatus["available"] == true
             }.onFailure { Log.e(TAG, "App-owned audio unavailable; local merge disabled", it) }
                 .getOrDefault(false)
         } catch (t: Throwable) {""", "start shared Android audio")
@@ -810,7 +811,7 @@ def patch_android_app() -> None:
 
     private fun waitForConference(pair: List<ActiveCall>, heldBefore: List<ActiveCall>, attempt: Int) {
         if (!conferencePending) return
-        if (pair.any { !calls.contains(it) || it.call.isEnded }) {
+        if (pair.any { !calls.contains(it) || it.call.state.isTerminal }) {
             conferencePending = false
             push()
             return
