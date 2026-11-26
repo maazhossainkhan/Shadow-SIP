@@ -2,3 +2,7 @@
 	path = upstream/medut-softphone
 	url = https://github.com/Ibrahimgamal99/medut-softphone.git
 	branch = main
+[submodule "sdk/Medut-SDK"]
+	path = sdk/Medut-SDK
+	url = https://github.com/Ibrahimgamal99/Medut-SDK.git
+	branch = main

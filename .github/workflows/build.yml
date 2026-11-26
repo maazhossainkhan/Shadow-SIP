@@ -22,6 +22,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -29,8 +32,18 @@ jobs:
           cache: true
       - name: Accept Android licences
         run: yes | flutter doctor --android-licenses || true
+      - name: Install Android native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358" >/dev/null
+          echo "ANDROID_NDK=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
       - name: Prepare Shadow-SIP branding
         run: pwsh -File ./scripts/prepare-shadow.ps1
+      - name: Apply local 3-way audio engine
+        run: python ./scripts/apply-local-conference.py
+      - name: Build patched Medut Android audio libraries
+        run: bash sdk/Medut-SDK/scripts/build-android.sh
       - name: Dependencies, analysis and tests
         working-directory: upstream/medut-softphone
         run: |
@@ -53,6 +66,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -61,6 +77,8 @@ jobs:
       - name: Prepare Shadow-SIP branding
         shell: pwsh
         run: .\scripts\prepare-shadow.ps1
+      - name: Apply local 3-way call management
+        run: python ./scripts/apply-local-conference.py
       - name: Dependencies, analysis and tests
         working-directory: upstream/medut-softphone
         run: |
