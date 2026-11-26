@@ -384,6 +384,21 @@ static int conference_pull(struct mdt_auplay_st *play0,
 }""", "playback teardown")
 
     replace_once(c,
+"""static int ext_play_alloc(struct mdt_auplay_st **stp, const struct mdt_auplay *ap,
+                          struct mdt_auplay_prm *prm, const char *device,
+                          mdt_auplay_write_h *wh, void *arg)
+{
+	struct mdt_auplay_st *st;
+	(void)ap; (void)device;""",
+"""static int ext_play_alloc(struct mdt_auplay_st **stp, const struct mdt_auplay *ap,
+                          struct mdt_auplay_prm *prm, const char *device,
+                          mdt_auplay_write_h *wh, void *arg)
+{
+	struct mdt_auplay_st *st;
+	int err = 0;
+	(void)ap; (void)device;""", "declare playback allocation error")
+
+    replace_once(c,
 """\tst->wh  = wh;
 \tst->arg = arg;
 \tst->prm = *prm;
