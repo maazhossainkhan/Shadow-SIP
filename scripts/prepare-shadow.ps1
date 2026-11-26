@@ -17,31 +17,32 @@ $pubspec = $pubspec -replace '(?m)^version:.*$', 'version: 0.2.0+7'
 $extensions = @(".dart", ".kt", ".json", ".kts", ".xml", ".cpp", ".h", ".iss", ".properties")
 Get-ChildItem -Path $app -Recurse -File | Where-Object { $extensions -contains $_.Extension.ToLowerInvariant() } | ForEach-Object {
     $path = $_.FullName
+    $relative = [System.IO.Path]::GetRelativePath($app, $path).Replace('\', '/')
     $content = [System.IO.File]::ReadAllText($path)
     $updated = $content.Replace("package:medut_phone/", "package:shadow_sip/")
 
-    if ($path -match '[/\\]assets[/\\]translations[/\\][^/\\]+\.json$') {
+    if ($relative.StartsWith("assets/translations/") -and $relative.EndsWith(".json")) {
         $updated = [regex]::Replace($updated, '(?<![A-Za-z0-9_])Medut(?![-A-Za-z0-9_])', 'Shadow-SIP')
     }
-    if ($path -eq (Join-Path $app "lib/app.dart")) {
+    if ($relative -eq "lib/app.dart") {
         $updated = $updated.Replace("title: 'Medut'", "title: 'Shadow-SIP'")
     }
-    if ($path -eq (Join-Path $app "android/app/build.gradle.kts")) {
+    if ($relative -eq "android/app/build.gradle.kts") {
         $updated = $updated.Replace('applicationId = "com.medut.generic.phone"', 'applicationId = "com.maaz.shadowsip"')
         $updated = $updated.Replace('resValue("string", "app_name", "Medut")', 'resValue("string", "app_name", "Shadow-SIP")')
     }
-    if ($path -eq (Join-Path $app "windows/runner/main.cpp")) {
+    if ($relative -eq "windows/runner/main.cpp") {
         $updated = $updated.Replace("MEDUT_PHONE_WINDOW", "SHADOW_SIP_PHONE_WINDOW")
         $updated = $updated.Replace('Local\\com.medut.generic.phone', 'Local\\com.maaz.shadowsip')
         $updated = $updated.Replace('L"Medut"', 'L"Shadow-SIP"')
     }
-    if ($path -eq (Join-Path $app "windows/installer.iss")) {
+    if ($relative -eq "windows/installer.iss") {
         $updated = [regex]::Replace($updated, '(?<![A-Za-z0-9_])Medut(?![-A-Za-z0-9_])', 'Shadow-SIP')
         $updated = $updated.Replace('"Shadow-SIP.CallLink"', '"ShadowSIP.CallLink"')
     }
     $updated = $updated.Replace("Recordings/Medut", "Recordings/Shadow-SIP")
     $updated = $updated.Replace("Recordings\Medut", "Recordings\Shadow-SIP")
-    if ($path -eq (Join-Path $app "lib/main.dart")) {
+    if ($relative -eq "lib/main.dart") {
         $updated = $updated.Replace("MEDUT_VERSION", "SHADOW_SIP_VERSION")
     }
     if ($updated -cne $content) {
