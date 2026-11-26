@@ -24,6 +24,44 @@ def patch_sdk() -> None:
 """#include "../core/medut_internal.h"
 #include "../media/mdt_media.h" """.rstrip(), "audio owner lookup")
 
+    replace_once(c,
+"""struct mdt_ausrc_st {
+	struct le        le;      /* member of s_srcl, newest last */
+	struct mdt_ausrc_prm prm;
+	mdt_ausrc_read_h    *rh;
+	void            *arg;
+	struct aubuf    *ab;
+	int16_t         *frame;   /* one ptime of samples, handed to rh */
+	size_t           sampc;
+};""",
+"""struct mdt_ausrc_st {
+	struct le        le;      /* member of s_srcl, newest last */
+	struct mdt_ausrc_prm prm;
+	mdt_ausrc_read_h    *rh;
+	void            *arg;
+	struct aubuf    *ab;
+	int16_t         *frame;   /* one ptime of samples, handed to rh */
+	int16_t         *peer_frame; /* other caller PCM, capture thread only */
+	size_t           sampc;
+};""", "capture source peer scratch frame")
+
+    replace_once(c,
+"""	st->frame = mem_zalloc(st->sampc * 2, NULL);
+	if (!st->frame) {
+		err = ENOMEM;
+		goto out;
+	}""",
+"""	st->frame = mem_zalloc(st->sampc * 2, NULL);
+	if (!st->frame) {
+		err = ENOMEM;
+		goto out;
+	}
+	st->peer_frame = mem_zalloc(st->sampc * 2, NULL);
+	if (!st->peer_frame) {
+		err = ENOMEM;
+		goto out;
+	}""", "allocate capture peer scratch frame")
+
     media_header = SDK / "src/media/mdt_media.h"
     replace_once(media_header,
 """int mdt_aurecv_alloc(struct mdt_audio_recv **aupp, const struct mdt_config_audio *cfg,
@@ -487,7 +525,9 @@ static int conference_pull(struct mdt_auplay_st *play0,
 \ts_conference = false;
 \tmtx_unlock(&s_lock);
 
-\tmem_deref(st->ab);""", "capture teardown")
+\tmem_deref(st->ab);
+\tmem_deref(st->frame);
+\tmem_deref(st->peer_frame);""", "capture teardown")
 
     replace_once(c,
 """static void auplay_destructor(void *arg)
