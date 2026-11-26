@@ -46,8 +46,8 @@ void *mdt_aurecv_owner(const struct mdt_audio_recv *ar);""", "audio owner API")
 
     audio = SDK / "src/media/audio.c"
     replace_once(audio,
-"""\\terr = mdt_aurecv_alloc(&a->aur, &a->cfg, AUDIO_SAMPSZ, ptime);\n\\tif (err)\n\\t\\tgoto out;""",
-"""\\terr = mdt_aurecv_alloc(&a->aur, &a->cfg, AUDIO_SAMPSZ, ptime);\n\\tif (err)\n\\t\\tgoto out;\n\\tmdt_aurecv_set_owner(a->aur, a);""", "attach audio receiver owner")
+"""\terr = mdt_aurecv_alloc(&a->aur, &a->cfg, AUDIO_SAMPSZ, ptime);\n\tif (err)\n\t\tgoto out;""",
+"""\terr = mdt_aurecv_alloc(&a->aur, &a->cfg, AUDIO_SAMPSZ, ptime);\n\tif (err)\n\t\tgoto out;\n\tmdt_aurecv_set_owner(a->aur, a);""", "attach audio receiver owner")
 
     replace_once(c,
 """struct mdt_auplay_st {
@@ -209,7 +209,6 @@ static void mix_one_playback(struct mdt_auplay_st *st, int16_t *pcm,
 \t}
 }""", "audio mixer helpers")
 
-    replace_once(c,
     replace_once(c,
 """static bool conference_format_valid_locked(void)
 {
