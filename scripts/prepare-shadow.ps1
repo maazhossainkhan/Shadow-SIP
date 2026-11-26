@@ -19,13 +19,16 @@ Get-ChildItem -Path $app -Recurse -File | Where-Object { $extensions -contains $
     $path = $_.FullName
     $content = [System.IO.File]::ReadAllText($path)
     $updated = $content.Replace("package:medut_phone/", "package:shadow_sip/")
-    $updated = [regex]::Replace($updated, '\bMedut\b', 'Shadow-SIP')
+    $updated = [regex]::Replace($updated, '(?<![A-Za-z0-9_])Medut(?![-A-Za-z0-9_])', 'Shadow-SIP')
     if ($path -eq (Join-Path $app "android\app\build.gradle.kts")) {
         $updated = $updated.Replace('applicationId = "com.medut.generic.phone"', 'applicationId = "com.maaz.shadowsip"')
     }
     if ($path -eq (Join-Path $app "windows\runner\main.cpp")) {
         $updated = $updated.Replace("MEDUT_PHONE_WINDOW", "SHADOW_SIP_PHONE_WINDOW")
-        $updated = $updated.Replace('Local\com.medut.generic.phone', 'Local\com.maaz.shadowsip')
+        $updated = $updated.Replace('Local\\com.medut.generic.phone', 'Local\\com.maaz.shadowsip')
+    }
+    if ($path -eq (Join-Path $app "windows\installer.iss")) {
+        $updated = $updated.Replace('"Shadow-SIP.CallLink"', '"ShadowSIP.CallLink"')
     }
     if ($path -eq (Join-Path $app "lib\main.dart")) {
         $updated = $updated.Replace("MEDUT_VERSION", "SHADOW_SIP_VERSION")
