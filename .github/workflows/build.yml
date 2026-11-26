@@ -1,4 +1,4 @@
-name: Build Shadow-SIP
+name: Shadow-SIP Windows and Android
 
 on:
   push:
@@ -11,61 +11,67 @@ permissions:
   contents: read
 
 jobs:
-  windows:
-    name: Windows x64
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: '3.44.0'
-          cache: true
-      - name: Generate native runners
-        shell: pwsh
-        run: .\scripts\setup_platforms.ps1
-      - name: Get dependencies
-        run: flutter pub get
-      - name: Analyze
-        run: flutter analyze --no-pub
-      - name: Unit and widget tests
-        run: flutter test --no-pub
-      - name: Build Windows release
-        run: flutter build windows --release --no-pub
-      - uses: actions/upload-artifact@v4
-        with:
-          name: shadow-sip-windows-x64
-          path: build/windows/x64/runner/Release/
-          if-no-files-found: error
-
   android:
     name: Android APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.44.0'
+          flutter-version: "3.44.8"
           cache: true
-      - name: Accept Android SDK licences
+      - name: Accept Android licences
         run: yes | flutter doctor --android-licenses || true
-      - name: Generate native runners
-        run: pwsh -File ./scripts/setup_platforms.ps1
-      - name: Get dependencies
-        run: flutter pub get
-      - name: Analyze
-        run: flutter analyze --no-pub
-      - name: Unit and widget tests
-        run: flutter test --no-pub
-      - name: Build Android release APK
-        run: flutter build apk --release --no-pub
+      - name: Prepare Shadow-SIP branding
+        run: pwsh -File ./scripts/prepare-shadow.ps1
+      - name: Dependencies, analysis and tests
+        working-directory: upstream/medut-softphone
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - name: Build release APK
+        working-directory: upstream/medut-softphone
+        run: flutter build apk --release --dart-define=SHADOW_SIP_VERSION=0.2.0
       - uses: actions/upload-artifact@v4
         with:
           name: shadow-sip-android-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: upstream/medut-softphone/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.8"
+          cache: true
+      - name: Prepare Shadow-SIP branding
+        shell: pwsh
+        run: .\scripts\prepare-shadow.ps1
+      - name: Dependencies, analysis and tests
+        working-directory: upstream/medut-softphone
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+      - name: Build release Windows app
+        working-directory: upstream/medut-softphone
+        run: flutter build windows --release --dart-define=SHADOW_SIP_VERSION=0.2.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shadow-sip-windows-x64
+          path: upstream/medut-softphone/build/windows/x64/runner/Release/
           if-no-files-found: error

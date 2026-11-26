@@ -1,0 +1,4 @@
+[submodule "upstream/medut-softphone"]
+	path = upstream/medut-softphone
+	url = https://github.com/Ibrahimgamal99/medut-softphone.git
+	branch = main
